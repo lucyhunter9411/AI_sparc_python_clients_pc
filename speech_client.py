@@ -70,11 +70,31 @@ async def record_audio(websocket):
                 recording = True
                 silence_count = 0  # Reset silence counter
 
+                # send message to audio client only once when speech starts
+                if not start_speaking:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post('http://localhost:5000', json={"message": "Start speaking"}) as response:
+                            if response.status == 200:
+                                print(f"Received_text when users start speaking.")
+                            else:
+                                print(f"Failed to send message: {response.status}")
+                    start_speaking = True  # Set the flag to True
+
                 print("Current Audio Volume:", np.max(np.abs(mono_audio)))
                 start_waiting_time = time.time()  # Reset waiting time on speech detection
             elif recording:
                 buffer.append(audio_bytes)  # Continue recording during silence
                 silence_count += 1
+                if silence_count > SILENCE_THRESHOLD:
+                    print("✅ Recording complete.")
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post('http://localhost:5000/recording', json={"message": "Recording Complete"}) as response:
+                            if response.status == 200:
+                                spoken_text = await response.text()
+                                print(f"Received_text when recording completed:{spoken_text}")
+                            else:
+                                print(f"Failed to send message: {response.status}")
+                    break  # Stop recording after prolonged silence
             else:
                 # Check if waiting time exceeds 5 seconds
                 if time.time() - start_waiting_time > 5:
