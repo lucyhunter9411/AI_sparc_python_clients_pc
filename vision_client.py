@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 SERVER_URL = " https://api-visionserver-dev-wus-001.azurewebsites.net/upload/"
 # SERVER_URL = " http://localhost:7000/upload/"
 CAPTURE_INTERVAL = 2  # seconds
-robot_id = "robot_1"
+robot_id = "robot_not_connected"
 
 cap = cv2.VideoCapture(0)
 last_capture_time = time.time()
@@ -37,7 +37,12 @@ while True:
         files = {"file": (unique_filename, img_encoded.tobytes(), "image/jpeg")}
 
         try:
-            response = requests.post(SERVER_URL, files=files, data={"robot_id": robot_id})
+            local_time_vision = datetime.now().isoformat()
+            dt_vision = datetime.fromisoformat(local_time_vision)
+            formatted_time_vision = dt_vision.strftime("%H")
+            hour = int(formatted_time_vision)  # Convert to integer
+
+            response = requests.post(SERVER_URL, files=files, data={"robot_id": robot_id, "local_time_vision": hour})
             result = response.json()
             # print("Server Response:", json.dumps(result, indent=2))
 
