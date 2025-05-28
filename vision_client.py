@@ -9,8 +9,8 @@ from datetime import datetime  # Import datetime module
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SERVER_URL = " https://api-visionserver-dev-wus-001.azurewebsites.net/upload/"
-# SERVER_URL = " http://localhost:7000/upload/"
+# SERVER_URL = " https://api-visionserver-dev-wus-001.azurewebsites.net/upload/"
+SERVER_URL = " http://localhost:7000/upload/"
 CAPTURE_INTERVAL = 2  # seconds
 robot_id = "robot_not_connected"
 

@@ -38,21 +38,21 @@ from aiohttp import web
 # ---------------------------------------------------------------------------
 # CONFIGURATION
 # ---------------------------------------------------------------------------
-ROBOT_ID = "robot_1"
-
-PRIMARY_WS_URI = (
-    "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/before/lecture"
-)
-LECTURE_WS_URI = (
-    f"wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/testdata/{ROBOT_ID}"
-)
+ROBOT_ID = "robot_not_connected"
 
 # PRIMARY_WS_URI = (
-#     "ws://localhost:8000/ws/before/lecture"
+#     "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/before/lecture"
 # )
 # LECTURE_WS_URI = (
-#     f"ws://localhost:8000/ws/testdata/{ROBOT_ID}"
+#     f"wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/testdata/{ROBOT_ID}"
 # )
+
+PRIMARY_WS_URI = (
+    f"ws://localhost:8000/ws/{ROBOT_ID}/before/lecture"
+)
+LECTURE_WS_URI = (
+    f"ws://localhost:8000/ws/testdata/{ROBOT_ID}"
+)
 
 
 HTTP_PORT = int(os.getenv("ROBOT_HTTP_PORT", 5000))
@@ -204,7 +204,19 @@ async def _generic_socket(uri: str, label: str) -> None:
                 print(f"🔗 Connected ({label})")
                 retry = 0
                 if label == "primary":
-                    await ws.send(json.dumps({"robot_id": ROBOT_ID, "client": "client"}))
+                    # await ws.send(json.dumps({
+                    #     "type": "register",
+                    #     "data": {
+                    #         "client": ROBOT_ID  # or "client" or any meaningful string
+                    #     }
+                    # }))
+                    await ws.send(json.dumps({
+                        "type": "register",
+                        "data": {
+                            "client": "audio"      # lets server distinguish roles
+                        },
+                        "ts": time.time(),
+                    }))
                 async for raw in ws:
                     try:
                         msg = json.loads(raw)

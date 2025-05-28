@@ -15,9 +15,9 @@ import datetime  # Add this import at the top of your file
 from tzlocal import get_localzone  # Import get_localzone from tzlocal
 
 # Constants for the WebSocket connection and audio processing
-ROBOT_ID = "robot_1"
-WEBSOCKET_URI = "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/before/lecture"
-# WEBSOCKET_URI = "ws://localhost:8000/ws/before/lecture"
+ROBOT_ID = "robot_not_connected"
+# WEBSOCKET_URI = "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/before/lecture"
+WEBSOCKET_URI = f"ws://localhost:8000/ws/{ROBOT_ID}/before/lecture"
 
 # Voice Activity Detection (VAD) and audio settings
 VAD_MODE = 3  # 0 = very sensitive, 3 = least sensitive
@@ -173,8 +173,19 @@ async def process_audio_and_send():
                 close_timeout=30,
                 max_size=10_000_000
             ) as websocket:
+                # await websocket.send(json.dumps({
+                #     "type": "register",
+                #     "data": {
+                #         "client": ROBOT_ID
+                #     }
+                # }))
                 await websocket.send(json.dumps({
-                    "robot_id": ROBOT_ID
+                    "type": "register",
+                    "data": {
+                        "robot_id": ROBOT_ID,     # redundant but explicit
+                        "client":   "speech"      # lets server distinguish roles
+                    },
+                    "ts": time.time(),
                 }))
                 retry_count = 0
                 if backend_choice is None:
@@ -190,12 +201,16 @@ async def process_audio_and_send():
                             local_time = datetime.datetime.now().isoformat()
                             local_region = str(get_localzone())
                             await websocket.send(json.dumps({
-                                "robot_id": ROBOT_ID,
-                                "audio": audio,
-                                "backend": backend_choice,
-                                "spoken_text": spoken_text,
-                                "local_time": local_time,
-                                "local_region": local_region
+                                "type": "speech",
+                                "data": {
+                                    "robot_id": ROBOT_ID,
+                                    "audio": audio,
+                                    "backend": backend_choice,
+                                    "spoken_text": spoken_text,
+                                    "local_time": local_time,
+                                    "local_region": local_region
+                                },
+                                "ts": time.time(),
                             }))
                             stash.remove(audio)
                             response = await websocket.recv()
