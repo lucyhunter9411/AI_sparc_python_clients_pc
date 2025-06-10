@@ -15,8 +15,8 @@ import datetime  # Add this import at the top of your file
 from tzlocal import get_localzone  # Import get_localzone from tzlocal
 
 # Constants for the WebSocket connection and audio processing
-ROBOT_ID = "robot_not_connected"
-# WEBSOCKET_URI = "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/before/lecture"
+ROBOT_ID = "robot_20250610124429103"
+# WEBSOCKET_URI = "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/{ROBOT_ID}/before/lecture"
 WEBSOCKET_URI = f"ws://localhost:8000/ws/{ROBOT_ID}/before/lecture"
 
 # Voice Activity Detection (VAD) and audio settings
@@ -43,7 +43,7 @@ async def record_audio(websocket):
     buffer = []  # Buffer to store audio frames
     recording = False  # Flag to indicate if recording is active
     silence_count = 0  # Counter for silent frames
-    start_speaking = False  # Flag to track if user srat to speaking
+    start_speaking = False  # Flag to track if user start speaking
 
     # Initialize PyAudio and open a stream for recording
     p = pyaudio.PyAudio()
@@ -70,16 +70,14 @@ async def record_audio(websocket):
                 recording = True
                 silence_count = 0  # Reset silence counter
 
-                # send message to audio client only once when speech starts
                 if not start_speaking:
                     async with aiohttp.ClientSession() as session:
                         async with session.post('http://localhost:5000', json={"message": "Start speaking"}) as response:
                             if response.status == 200:
-                                print(f"Received_text when users start speaking.")
+                                print(f"Received text when users start speaking.")
                             else:
                                 print(f"Failed to send message: {response.status}")
-                    start_speaking = True  # Set the flag to True
-
+                    start_speaking = True
                 print("Current Audio Volume:", np.max(np.abs(mono_audio)))
                 start_waiting_time = time.time()  # Reset waiting time on speech detection
             elif recording:
@@ -91,16 +89,14 @@ async def record_audio(websocket):
                         async with session.post('http://localhost:5000/recording', json={"message": "Recording Complete"}) as response:
                             if response.status == 200:
                                 spoken_text = await response.text()
-                                print(f"Received_text when recording completed:{spoken_text}")
+                                print(f"Received text when recording completed: {spoken_text}")
                             else:
                                 print(f"Failed to send message: {response.status}")
                     break  # Stop recording after prolonged silence
             else:
-                # Check if waiting time exceeds 5 seconds
                 if time.time() - start_waiting_time > 5:
-                    break  # Exit the loop to trigger reconnection
+                    break
 
-                # Send a "waiting" status to the WebSocket every 10 seconds
                 if time.time() - last_status_time >= 10:
                     await websocket.send(json.dumps({"robot_id": ROBOT_ID, "status": "waiting"}))
                     last_status_time = time.time()
@@ -112,7 +108,7 @@ async def record_audio(websocket):
         p.terminate()
 
     if not buffer:
-        return None  # Return None if no audio was recorded
+        return None
 
     # Convert the recorded audio to WAV format
     byte_stream = io.BytesIO()
@@ -122,8 +118,12 @@ async def record_audio(websocket):
     wav_writer.setframerate(SAMPLE_RATE)
     wav_writer.writeframes(b''.join(buffer))
 
-    # Return the audio as a base64-encoded string
-    return base64.b64encode(byte_stream.getvalue()).decode("utf-8")
+    # # Return the audio as a base64-encoded string
+    # return base64.b64encode(byte_stream.getvalue()).decode("utf-8")
+
+    # Return the audio as raw bytes
+    return byte_stream.getvalue()  # Return raw audio bytes
+
 
 async def get_backend_choice():
     """Select a stt model for transcription."""
@@ -173,30 +173,29 @@ async def process_audio_and_send():
                 close_timeout=30,
                 max_size=10_000_000
             ) as websocket:
-                # await websocket.send(json.dumps({
-                #     "type": "register",
-                #     "data": {
-                #         "client": ROBOT_ID
-                #     }
-                # }))
-                await websocket.send(json.dumps({
-                    "type": "register",
-                    "data": {
-                        "robot_id": ROBOT_ID,     # redundant but explicit
-                        "client":   "speech"      # lets server distinguish roles
-                    },
-                    "ts": time.time(),
-                }))
                 retry_count = 0
                 if backend_choice is None:
                     backend_choice = await get_backend_choice()
 
                 # 🔁 Stay in conversation loop
                 while True:
-                    audio_base64 = await record_audio(websocket)
+                    # audio_base64 = await record_audio(websocket)
+                    audio_bytes = await record_audio(websocket)
 
-                    if audio_base64:
-                        push(audio_base64)
+                    if audio_bytes:
+                        # Convert the audio bytes to a list of integers
+                        audio_int_list = list(audio_bytes)
+
+                        await websocket.send(json.dumps({
+                            "type": "register",
+                            "data": {
+                                "robot_id": ROBOT_ID,     # redundant but explicit
+                                "client":   "speech"      # lets server distinguish roles
+                            },
+                            "ts": time.time(),
+                        }))
+                        
+                        push(audio_int_list)
                         for audio in stash[:]:
                             local_time = datetime.datetime.now().isoformat()
                             local_region = str(get_localzone())
@@ -214,7 +213,7 @@ async def process_audio_and_send():
                             }))
                             stash.remove(audio)
                             response = await websocket.recv()
-                            print(f"📝 Transcription: {response}\n")
+                            print(f"📝 Transcription: {response}")
                     else:
                         print("🕐 No speech detected, waiting for user...")
                         await asyncio.sleep(1)  # short pause before next VAD cycle
