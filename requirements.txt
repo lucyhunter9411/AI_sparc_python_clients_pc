@@ -7,8 +7,3 @@ pyaudio
 setuptools
 asyncio
 threading
-aiohttp
-datetime
-tzlocal
-opencv-python
-requests
