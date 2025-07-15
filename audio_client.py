@@ -38,7 +38,7 @@ from aiohttp import web
 # ---------------------------------------------------------------------------
 # CONFIGURATION
 # ---------------------------------------------------------------------------
-ROBOT_ID = "robot_20250610124429103"
+ROBOT_ID = "robot_1"
 
 # PRIMARY_WS_URI = (
 #     "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/{ROBOT_ID}/before/lecture"
@@ -143,16 +143,16 @@ async def playback_worker() -> None:
 
 # ---------------------------------------------------------------------------
 # ENQUEUE FUNCTION
-# ---------------------------------------------------------------------------
-async def enqueue_clip(audio_bytes: str, text: str = "") -> None:
-    """Place a clip on the playback queue, dropping old clips if stopped."""
-    try:
-        print(f"Received audio of length: {len(audio_bytes)} bytes")
-        playback_queue.put_nowait((text, audio_bytes))
-    except asyncio.QueueFull:
-        print("⚠️  Playback queue full – dropping clip")
+# # ---------------------------------------------------------------------------
+# async def enqueue_clip(audio_bytes: str, text: str = "") -> None:
+#     """Place a clip on the playback queue, dropping old clips if stopped."""
+#     try:
+#         print(f"Received audio of length: {len(audio_bytes)} bytes")
+#         playback_queue.put_nowait((text, audio_bytes))
+#     except asyncio.QueueFull:
+#         print("⚠️  Playback queue full – dropping clip")
 
-# ---------------------------------------------------------------------------
+# # ---------------------------------------------------------------------------
 # HTTP ENDPOINTS
 # ---------------------------------------------------------------------------
 async def handle_start_speaking(request: web.Request):

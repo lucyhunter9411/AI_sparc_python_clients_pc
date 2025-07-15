@@ -15,7 +15,7 @@ import datetime  # Add this import at the top of your file
 from tzlocal import get_localzone  # Import get_localzone from tzlocal
 
 # Constants for the WebSocket connection and audio processing
-ROBOT_ID = "robot_20250610124429103"
+ROBOT_ID = "robot_1"
 # WEBSOCKET_URI = "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/{ROBOT_ID}/before/lecture"
 WEBSOCKET_URI = f"ws://localhost:8000/ws/{ROBOT_ID}/before/lecture"
 
@@ -196,24 +196,24 @@ async def process_audio_and_send():
                         }))
                         
                         push(audio_int_list)
-                        for audio in stash[:]:
-                            local_time = datetime.datetime.now().isoformat()
-                            local_region = str(get_localzone())
-                            await websocket.send(json.dumps({
-                                "type": "speech",
-                                "data": {
-                                    "robot_id": ROBOT_ID,
-                                    "audio": audio,
-                                    "backend": backend_choice,
-                                    "spoken_text": spoken_text,
-                                    "local_time": local_time,
-                                    "local_region": local_region
-                                },
-                                "ts": time.time(),
-                            }))
-                            stash.remove(audio)
-                            response = await websocket.recv()
-                            print(f"📝 Transcription: {response}")
+                        # for audio in stash[:]:
+                        #     local_time = datetime.datetime.now().isoformat()
+                        #     local_region = str(get_localzone())
+                        #     await websocket.send(json.dumps({
+                        #         "type": "speech",
+                        #         "data": {
+                        #             "robot_id": ROBOT_ID,
+                        #             "audio": audio,
+                        #             "backend": backend_choice,
+                        #             "spoken_text": spoken_text,
+                        #             "local_time": local_time,
+                        #             "local_region": local_region
+                        #         },
+                        #         "ts": time.time(),
+                        #     }))
+                        #     stash.remove(audio)
+                        #     response = await websocket.recv()
+                        #     print(f"📝 Transcription: {response}")
                     else:
                         print("🕐 No speech detected, waiting for user...")
                         await asyncio.sleep(1)  # short pause before next VAD cycle
