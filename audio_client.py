@@ -38,20 +38,20 @@ from aiohttp import web
 # ---------------------------------------------------------------------------
 # CONFIGURATION
 # ---------------------------------------------------------------------------
-ROBOT_ID = "robot_not_connected"
+ROBOT_ID = "robot_1"
 
 # PRIMARY_WS_URI = (
 #     "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/{ROBOT_ID}/before/lecture"
 # )
 # LECTURE_WS_URI = (
-#     f"wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/testdata/{ROBOT_ID}"
+#     f"wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/{ROBOT_ID}/lesson_audio"
 # )
 
 PRIMARY_WS_URI = (
     f"ws://localhost:8000/ws/{ROBOT_ID}/before/lecture"
 )
 LECTURE_WS_URI = (
-    f"ws://localhost:8000/ws/testdata/{ROBOT_ID}"
+    f"ws://localhost:8000/ws/{ROBOT_ID}/lesson_audio"
 )
 
 
@@ -60,7 +60,7 @@ HTTP_PORT = int(os.getenv("ROBOT_HTTP_PORT", 5000))
 # ---------------------------------------------------------------------------
 # GLOBAL STATE
 # ---------------------------------------------------------------------------
-playback_queue: asyncio.Queue[Tuple[str, str]] = asyncio.Queue()
+playback_queue: asyncio.Queue[Tuple[str, bytes]] = asyncio.Queue()
 stop_playback_event = asyncio.Event()  # set() → interrupt current clip
 spoken_text: str = ""  # what portion of TTS actually played
 
@@ -68,19 +68,16 @@ spoken_text: str = ""  # what portion of TTS actually played
 # WAV HELPERS
 # ---------------------------------------------------------------------------
 
-def _decode_wav(b64: str) -> Tuple[int, np.ndarray]:
-    """Return (samplerate, audio[f, ch]) in float32 ∈ [-1, 1]."""
-    buf = base64.b64decode(b64)
-    with wave.open(io.BytesIO(buf), "rb") as wf:
+def _decode_wav(audio_bytes: bytes) -> Tuple[int, np.ndarray]:
+    """Return (samplerate, audio[f, ch]) in float32 ∈ [-1, 1]."""
+    with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
         sr = wf.getframerate()
         n_ch = wf.getnchannels()
         frames = wf.readframes(wf.getnframes())
-
-    audio = (
-        np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-    )
+    
+    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
     if n_ch > 1:
-        audio = audio.reshape(-1, n_ch)  # shape (frames, channels)
+        audio = audio.reshape(-1, n_ch)
     return sr, audio
 
 # ---------------------------------------------------------------------------
@@ -91,15 +88,20 @@ async def playback_worker() -> None:
     global spoken_text
 
     while True:
-        text, audio_b64 = await playback_queue.get()
+        text, audio_bytes = await playback_queue.get()
         stop_playback_event.clear()
-        sr, audio = _decode_wav(audio_b64)
+        if isinstance(audio_bytes, bytes):  # Ensure the audio data is in bytes
+            sr, audio = _decode_wav(audio_bytes)  # Decode and play the audio
+        else:
+            print(f"Received invalid audio data")
+            continue
         duration = len(audio) / sr
         channels = 1 if audio.ndim == 1 else audio.shape[1]
         print(f"🔊 clip: {duration:.2f}s @ {sr} Hz, {channels}ch")
 
         if isinstance(text, dict):
             text = text.get("text", "")  # Adjust this line based on your data structure
+
         words = text.split()
         word_dur = duration / len(words) if words else 0.0
 
@@ -142,10 +144,11 @@ async def playback_worker() -> None:
 # ---------------------------------------------------------------------------
 # ENQUEUE FUNCTION
 # ---------------------------------------------------------------------------
-async def enqueue_clip(audio_b64: str, text: str = "") -> None:
+async def enqueue_clip(audio_bytes: str, text: str = "") -> None:
     """Place a clip on the playback queue, dropping old clips if stopped."""
     try:
-        playback_queue.put_nowait((text, audio_b64))
+        print(f"Received audio of length: {len(audio_bytes)} bytes")
+        playback_queue.put_nowait((text, audio_bytes))
     except asyncio.QueueFull:
         print("⚠️  Playback queue full – dropping clip")
 
@@ -204,12 +207,6 @@ async def _generic_socket(uri: str, label: str) -> None:
                 print(f"🔗 Connected ({label})")
                 retry = 0
                 if label == "primary":
-                    # await ws.send(json.dumps({
-                    #     "type": "register",
-                    #     "data": {
-                    #         "client": ROBOT_ID  # or "client" or any meaningful string
-                    #     }
-                    # }))
                     await ws.send(json.dumps({
                         "type": "register",
                         "data": {
@@ -230,9 +227,29 @@ async def _generic_socket(uri: str, label: str) -> None:
                     text = msg.get("text", "")
                     if text:
                         print(f"📝 {text}")
-                    audio_b64 = msg.get("audio")
-                    if audio_b64:
-                        await enqueue_clip(audio_b64, text)
+                    # audio_list = msg.get("audio")
+                    # if audio_list:
+                    #     try:
+                    #         # Convert list of bytes back to bytes
+                    #         audio_bytes = bytes(audio_list)
+                    #         print(f"Received audio of length: {len(audio_bytes)} bytes")
+                    #         await enqueue_clip(audio_bytes, text)
+                    #     except Exception as exc:
+                    #         print(f"❌ Error processing audio data: {exc}")
+                    audio_bytes = None
+
+                    if "audio" in msg and msg["audio"]:
+                        # Old format: single list of bytes
+                        audio_bytes = bytes(msg["audio"])
+                    elif "audio_chunks" in msg and msg["audio_chunks"]:
+                        # New format: list of byte chunks
+                        # Each chunk is a list of ints, so convert each to bytes and join
+                        audio_bytes = b"".join(bytes(chunk) for chunk in msg["audio_chunks"])
+
+                    if audio_bytes:
+                        print(f"Received audio of length: {len(audio_bytes)} bytes")
+                        await enqueue_clip(audio_bytes, text)
+                        
         except Exception as exc:
             retry += 1
             delay = min(60, 2 ** retry)
