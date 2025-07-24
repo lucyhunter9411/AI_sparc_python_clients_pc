@@ -15,7 +15,7 @@ import datetime  # Add this import at the top of your file
 from tzlocal import get_localzone  # Import get_localzone from tzlocal
 
 # Constants for the WebSocket connection and audio processing
-ROBOT_ID = "robot_20250610124429103"
+ROBOT_ID = "robot_1"
 # WEBSOCKET_URI = "wss://app-ragbackend-dev-wus-001.azurewebsites.net/ws/{ROBOT_ID}/before/lecture"
 WEBSOCKET_URI = f"ws://localhost:8000/ws/{ROBOT_ID}/before/lecture"
 
