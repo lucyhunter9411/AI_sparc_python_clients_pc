@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # SERVER_URL = " https://api-visionserver-dev-wus-001.azurewebsites.net/upload/"
 SERVER_URL = " http://localhost:7000/upload/"
 CAPTURE_INTERVAL = 2  # seconds
-robot_id = "robot_not_connected"
+robot_id = "robot_1"
 
 cap = cv2.VideoCapture(0)
 last_capture_time = time.time()

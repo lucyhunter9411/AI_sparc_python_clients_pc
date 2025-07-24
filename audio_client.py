@@ -198,6 +198,12 @@ async def start_http_server() -> None:
 # ---------------------------------------------------------------------------
 # WEBSOCKET CLIENTS
 # ---------------------------------------------------------------------------
+
+# Add a dictionary to store chunks for each message
+audio_chunks_buffer = {}
+chunk_receive_timeouts = {}
+chunk_receive_start_times = {}
+
 async def _generic_socket(uri: str, label: str) -> None:
     retry = 0
     while True:
@@ -227,35 +233,53 @@ async def _generic_socket(uri: str, label: str) -> None:
                     text = msg.get("text", "")
                     if text:
                         print(f"📝 {text}")
-                    # audio_list = msg.get("audio")
-                    # if audio_list:
-                    #     try:
-                    #         # Convert list of bytes back to bytes
-                    #         audio_bytes = bytes(audio_list)
-                    #         print(f"Received audio of length: {len(audio_bytes)} bytes")
-                    #         await enqueue_clip(audio_bytes, text)
-                    #     except Exception as exc:
-                    #         print(f"❌ Error processing audio data: {exc}")
-                    audio_bytes = None
 
-                    if "audio" in msg and msg["audio"]:
-                        # Old format: single list of bytes
-                        audio_bytes = bytes(msg["audio"])
-                    elif "audio_chunks" in msg and msg["audio_chunks"]:
-                        # New format: list of byte chunks
-                        # Each chunk is a list of ints, so convert each to bytes and join
-                        audio_bytes = b"".join(bytes(chunk) for chunk in msg["audio_chunks"])
+                    # Handle audio chunks
+                    if "audio_chunk" in msg:
+                        chunk = msg["audio_chunk"]
+                        sequence_number = chunk["sequence_number"]
+                        total_chunks = chunk["total_chunks"]
+                        data = bytes(chunk["data"])
 
-                    if audio_bytes:
-                        print(f"Received audio of length: {len(audio_bytes)} bytes")
-                        await enqueue_clip(audio_bytes, text)
-                        
+                        # Store the chunk in the buffer
+                        if msg["robot_id"] not in audio_chunks_buffer:
+                            audio_chunks_buffer[msg["robot_id"]] = [None] * total_chunks
+                            # Set a timeout for receiving all chunks
+                            chunk_receive_timeouts[msg["robot_id"]] = asyncio.get_event_loop().time() + 10  # 10 seconds timeout
+                            # Log the time when the first chunk is received
+                            chunk_receive_start_times[msg["robot_id"]] = time.time()
+                            print(f"⏱️ First chunk received for {msg['robot_id']} at {chunk_receive_start_times[msg['robot_id']]}")
+
+                        audio_chunks_buffer[msg["robot_id"]][sequence_number] = data
+
+                        # Check if all chunks are received
+                        if None not in audio_chunks_buffer[msg["robot_id"]]:
+                            # Reconstruct the full audio
+                            audio_bytes = b"".join(audio_chunks_buffer[msg["robot_id"]])
+                            del audio_chunks_buffer[msg["robot_id"]]  # Clear buffer
+                            del chunk_receive_timeouts[msg["robot_id"]]  # Clear timeout
+                            # Log the time when the last chunk is received
+                            end_time = time.time()
+                            duration = end_time - chunk_receive_start_times[msg["robot_id"]]
+                            print(f"⏱️ Last chunk received for {msg['robot_id']} at {end_time}")
+                            print(f"⏱️ Total time to receive all chunks: {duration:.2f} seconds")
+                            del chunk_receive_start_times[msg["robot_id"]]  # Clear start time
+                            print(f"Received complete audio of length: {len(audio_bytes)} bytes")
+                            await enqueue_clip(audio_bytes, text)
+                        else:
+                            # Check for timeout
+                            if asyncio.get_event_loop().time() > chunk_receive_timeouts[msg["robot_id"]]:
+                                print(f"⚠️ Timeout: Not all chunks received for {msg['robot_id']}")
+                                del audio_chunks_buffer[msg["robot_id"]]  # Clear buffer
+                                del chunk_receive_timeouts[msg["robot_id"]]  # Clear timeout
+                                del chunk_receive_start_times[msg["robot_id"]]  # Clear start time
+                                # Optionally, implement a retry mechanism here
+
         except Exception as exc:
             retry += 1
             delay = min(60, 2 ** retry)
             print(f"⚠️  {label} socket error: {exc} – reconnecting in {delay}s …")
             await asyncio.sleep(delay)
-
 
 auth_primary = lambda: _generic_socket(PRIMARY_WS_URI, "primary")
 auth_lecture = lambda: _generic_socket(LECTURE_WS_URI, "lecture")
